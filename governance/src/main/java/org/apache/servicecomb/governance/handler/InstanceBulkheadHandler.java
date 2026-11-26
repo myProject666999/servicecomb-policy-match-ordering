@@ -54,11 +54,7 @@ public class InstanceBulkheadHandler extends AbstractGovernanceHandler<Bulkhead,
     if (key.startsWith(this.bulkheadProperties.getConfigKey())) {
       for (String processorKey : processors.keySet()) {
         if (processorKey.startsWith(key)) {
-          Disposable<Bulkhead> processor = processors.remove(processorKey);
-          if (processor != null) {
-            LOGGER.info("remove instance bulkhead processor {}", key);
-            processor.dispose();
-          }
+          removeProcessor(processorKey);
         }
       }
     }
@@ -80,7 +76,8 @@ public class InstanceBulkheadHandler extends AbstractGovernanceHandler<Bulkhead,
   }
 
   private Disposable<Bulkhead> getBulkhead(String key, BulkheadPolicy policy) {
-    LOGGER.info("applying new policy {} for {}", key, policy.toString());
+    LOGGER.info("applying new policy {} for {} (policy version {})", key, policy,
+        policy.getVersion());
 
     BulkheadConfig config = BulkheadConfig.custom()
         .maxConcurrentCalls(policy.getMaxConcurrentCalls())

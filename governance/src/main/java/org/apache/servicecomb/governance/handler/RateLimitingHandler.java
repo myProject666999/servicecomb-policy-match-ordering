@@ -56,7 +56,8 @@ public class RateLimitingHandler extends AbstractGovernanceHandler<RateLimiter, 
   }
 
   private Disposable<RateLimiter> getRateLimiter(String key, RateLimitingPolicy policy) {
-    LOGGER.info("applying new policy {} for {}", key, policy.toString());
+    LOGGER.info("applying new policy {} for {} (policy version {})", key, policy,
+        policy.getVersion());
 
     RateLimiterConfig config = RateLimiterConfig.custom()
         .limitForPeriod(policy.getRate())

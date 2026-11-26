@@ -55,7 +55,8 @@ public class GovernanceCacheHandler<K, V>
   }
 
   protected Disposable<GovernanceCache<K, V>> getGovernanceCache(String key, GovernanceCachePolicy policy) {
-    LOGGER.info("applying new policy {} for {}", key, policy.toString());
+    LOGGER.info("applying new policy {} for {} (policy version {})", key, policy,
+        policy.getVersion());
     Cache<K,
         V> cache = CacheBuilder.newBuilder()
         .expireAfterWrite(Duration.parse(policy.getTtl()))

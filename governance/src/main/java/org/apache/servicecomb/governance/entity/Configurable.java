@@ -25,7 +25,22 @@ public abstract class Configurable {
 
   protected String services;
 
+  /**
+   * Monotonic version assigned by the properties class on every successful parse. It is not part of
+   * the configuration format and is used to tell whether a cached runtime object was built from the
+   * current configuration.
+   */
+  protected long version;
+
   public abstract boolean isValid();
+
+  public long getVersion() {
+    return version;
+  }
+
+  public void setVersion(long version) {
+    this.version = version;
+  }
 
   public String getName() {
     return name;

@@ -59,11 +59,7 @@ public class IdentifierRateLimitingHandler extends
     if (key.startsWith(this.rateLimitProperties.getConfigKey())) {
       for (String processorKey : processors.keySet()) {
         if (processorKey.startsWith(key)) {
-          Disposable<RateLimiter> processor = processors.remove(processorKey);
-          if (processor != null) {
-            LOGGER.info("remove identifier rate limiting processor {}", key);
-            processor.dispose();
-          }
+          removeProcessor(processorKey);
         }
       }
     }
@@ -81,7 +77,8 @@ public class IdentifierRateLimitingHandler extends
   }
 
   private Disposable<RateLimiter> getRateLimiter(String key, IdentifierRateLimitingPolicy policy) {
-    LOGGER.info("applying new policy {} for {}", key, policy.toString());
+    LOGGER.info("applying new policy {} for {} (policy version {})", key, policy,
+        policy.getVersion());
 
     RateLimiterConfig config = RateLimiterConfig.custom()
         .limitForPeriod(policy.getRate())

@@ -30,9 +30,20 @@ public abstract class AbstractPolicy extends Configurable implements Comparable<
     return !StringUtils.isEmpty(name);
   }
 
+  /**
+   * Policies are applied from the lowest order to the highest. Subtracting the orders overflows for
+   * values such as {@link Integer#MIN_VALUE} and {@link Integer#MAX_VALUE}, so the comparison is done
+   * with {@link Integer#compare(int, int)}. Policies sharing the same order are ordered by name to
+   * make the result deterministic and independent of the map iteration order.
+   */
   @Override
   public int compareTo(AbstractPolicy o) {
-    return this.order - o.order;
+    int orderCompare = Integer.compare(this.order, o.order);
+    if (orderCompare != 0) {
+      return orderCompare;
+    }
+    // names are never null for valid policies, compare handles null to keep compareTo total
+    return StringUtils.compare(this.name, o.name);
   }
 
   public int getOrder() {

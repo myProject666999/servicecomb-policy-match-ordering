@@ -57,6 +57,11 @@ public abstract class AbstractGovernanceHandler<PROCESSOR, POLICY extends Abstra
   }
 
   public PROCESSOR getActuator(GovernanceRequestExtractor requestExtractor) {
+    Disposable<PROCESSOR> processor = getOrCreateProcessor(requestExtractor);
+    return processor == null ? null : processor.get();
+  }
+
+  private Disposable<PROCESSOR> getOrCreateProcessor(GovernanceRequestExtractor requestExtractor) {
     POLICY policy = matchPolicy(requestExtractor);
     if (policy == null) {
       return null;
@@ -68,17 +73,49 @@ public abstract class AbstractGovernanceHandler<PROCESSOR, POLICY extends Abstra
     }
 
     Disposable<PROCESSOR> processor = processors.get(key);
-    if (processor == null) {
-      synchronized (lock) {
-        processor = processors.get(key);
-        if (processor == null) {
-          processor = createProcessor(key, requestExtractor, policy);
-          processors.put(key, processor);
-        }
-      }
+    if (processor != null && isCurrent(processor, policy)) {
+      return processor;
     }
 
-    return processor.get();
+    synchronized (lock) {
+      // Resolve the policy again under the same lock used to invalidate processors. A request may
+      // have matched a policy right before a refresh, while the refresh has already replaced the
+      // configuration. Publishing a processor built from that stale policy would keep the previous
+      // parameters until the next refresh, so the decision is taken again inside the lock.
+      POLICY currentPolicy = matchPolicy(requestExtractor);
+      if (currentPolicy == null) {
+        return null;
+      }
+      String currentKey = createKey(requestExtractor, currentPolicy);
+      if (currentKey == null) {
+        return null;
+      }
+
+      processor = processors.get(currentKey);
+      if (processor != null && isCurrent(processor, currentPolicy)) {
+        return processor;
+      }
+
+      // Dispose the processor built from the previous policy version before replacing it.
+      Disposable<PROCESSOR> stale = processors.remove(currentKey);
+      if (stale != null) {
+        stale.dispose();
+      }
+
+      processor = createProcessor(currentKey, requestExtractor, currentPolicy);
+      processor.setPolicyVersion(currentPolicy.getVersion());
+      processors.put(currentKey, processor);
+      return processor;
+    }
+  }
+
+  /**
+   * The policy version is assigned by the properties class for every parsed entity. A cached
+   * processor built from another version must not be reused: the configuration was replaced after
+   * the policy was matched and the processor holds the parameters of the previous configuration.
+   */
+  private boolean isCurrent(Disposable<PROCESSOR> processor, POLICY policy) {
+    return processor.getPolicyVersion() == policy.getVersion();
   }
 
   protected abstract String createKey(GovernanceRequestExtractor requestExtractor, POLICY policy);
@@ -88,12 +125,22 @@ public abstract class AbstractGovernanceHandler<PROCESSOR, POLICY extends Abstra
   protected abstract Disposable<PROCESSOR> createProcessor(String key, GovernanceRequestExtractor requestExtractor,
       POLICY policy);
 
-  protected void onConfigurationChanged(String key) {
-    Disposable<PROCESSOR> processor = processors.remove(key);
-    if (processor != null) {
-      LOGGER.info("remove governance processor {}", key);
-      processor.dispose();
+  /**
+   * Removes a processor under the same lock used to create one, so that a processor can not be
+   * re-added while the configuration change that invalidated it is still being applied.
+   */
+  protected void removeProcessor(String key) {
+    synchronized (lock) {
+      Disposable<PROCESSOR> processor = processors.remove(key);
+      if (processor != null) {
+        LOGGER.info("remove governance processor {}", key);
+        processor.dispose();
+      }
     }
+  }
+
+  protected void onConfigurationChanged(String key) {
+    removeProcessor(key);
   }
 
   @Subscribe

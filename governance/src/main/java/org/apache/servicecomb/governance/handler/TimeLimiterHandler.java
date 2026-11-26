@@ -58,7 +58,8 @@ public class TimeLimiterHandler extends AbstractGovernanceHandler<TimeLimiter, T
   }
 
   private Disposable<TimeLimiter> getTimeLimiter(String key, TimeLimiterPolicy policy) {
-    LOGGER.info("applying new policy {} for {}", key, policy);
+    LOGGER.info("applying new policy {} for {} (policy version {})", key, policy,
+        policy.getVersion());
     TimeLimiterConfig timeLimiterConfig = TimeLimiterConfig.custom()
         .timeoutDuration(Duration.parse(policy.getTimeoutDuration()))
         .cancelRunningFuture(policy.isCancelRunningFuture())

@@ -61,7 +61,8 @@ public class CircuitBreakerHandler extends AbstractGovernanceHandler<CircuitBrea
   }
 
   private Disposable<CircuitBreaker> getCircuitBreaker(String key, CircuitBreakerPolicy policy) {
-    LOGGER.info("applying new policy {} for {}", key, policy);
+    LOGGER.info("applying new policy {} for {} (policy version {})", key, policy,
+        policy.getVersion());
 
     CircuitBreakerConfig circuitBreakerConfig = CircuitBreakerConfig.custom()
         .failureRateThreshold(policy.getFailureRateThreshold())

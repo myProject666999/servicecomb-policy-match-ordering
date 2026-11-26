@@ -49,7 +49,8 @@ public class MapperHandler extends AbstractGovernanceHandler<Mapper, MapperPolic
   }
 
   private Disposable<Mapper> getMapper(String key, MapperPolicy policy) {
-    LOGGER.info("applying new policy {} for {}", key, policy.toString());
+    LOGGER.info("applying new policy {} for {} (policy version {})", key, policy,
+        policy.getVersion());
 
     return new DisposableHolder<>(key, Mapper.create(policy.getTarget()));
   }

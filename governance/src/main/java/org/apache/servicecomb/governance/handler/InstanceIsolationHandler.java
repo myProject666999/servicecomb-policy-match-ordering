@@ -65,11 +65,7 @@ public final class InstanceIsolationHandler extends AbstractGovernanceHandler<Ci
     if (key.startsWith(this.instanceIsolationProperties.getConfigKey())) {
       for (String processorKey : processors.keySet()) {
         if (processorKey.startsWith(key)) {
-          Disposable<CircuitBreaker> circuitBreaker = processors.remove(processorKey);
-          if (circuitBreaker != null) {
-            LOGGER.info("remove instance isolation processor {}", key);
-            circuitBreaker.dispose();
-          }
+          removeProcessor(processorKey);
         }
       }
     }
@@ -92,7 +88,8 @@ public final class InstanceIsolationHandler extends AbstractGovernanceHandler<Ci
   }
 
   private Disposable<CircuitBreaker> getCircuitBreaker(String key, CircuitBreakerPolicy policy) {
-    LOGGER.info("applying new policy {} for {}", key, policy.toString());
+    LOGGER.info("applying new policy {} for {} (policy version {})", key, policy,
+        policy.getVersion());
 
     CircuitBreakerConfig circuitBreakerConfig = CircuitBreakerConfig.custom()
         .failureRateThreshold(policy.getFailureRateThreshold())

@@ -23,6 +23,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.servicecomb.governance.MicroserviceMeta;
@@ -69,7 +70,16 @@ public abstract class GovernanceProperties<T extends Configurable> implements In
     this.microserviceMeta = microserviceMeta;
   }
 
-  protected Map<String, T> parsedEntity;
+  protected volatile Map<String, T> parsedEntity;
+
+  private final AtomicLong versionSequence = new AtomicLong();
+
+  /**
+   * Tells whether the last {@link #parseEntityItem(String, String)} invocation failed because the
+   * yaml could not be parsed. Other null results (removed, blanked, invalid or bound to another
+   * service) must keep their previous semantics, so the reasons can not be merged into a single null.
+   */
+  private final ThreadLocal<Boolean> parseFailed = ThreadLocal.withInitial(() -> Boolean.FALSE);
 
   protected Class<T> entityClass;
 
@@ -91,16 +101,51 @@ public abstract class GovernanceProperties<T extends Configurable> implements In
 
   @Subscribe
   public void onConfigurationChangedEvent(GovernanceConfigurationChangedEvent event) {
+    final Map<String, T> current = parsedEntity;
+    if (current == null) {
+      // afterPropertiesSet has not run yet, the initial load picks up the new values
+      return;
+    }
+
+    // The copy is built and published as a whole. Request threads therefore either see the previous
+    // snapshot or the complete new one, and never a state in which an already removed key is missing
+    // while the replacement is still being parsed. An alternative would be a ConcurrentHashMap, but
+    // it is updated key by key and still exposes the gap between remove and put.
+    Map<String, T> updated = new HashMap<>(current);
     for (String key : event.getChangedConfigurations()) {
-      if (key.startsWith(configKey + ".")) {
-        String mapKey = key.substring((configKey + ".").length());
-        parsedEntity.remove(mapKey);
-        T entityItem = parseEntityItem(mapKey, environment.getProperty(key));
-        if (entityItem != null) {
-          parsedEntity.put(mapKey, entityItem);
-        }
+      if (!key.startsWith(configKey + ".")) {
+        continue;
+      }
+      String mapKey = key.substring((configKey + ".").length());
+      String value = environment.getProperty(key);
+      parseFailed.remove();
+      if (StringUtils.isEmpty(value)) {
+        // the configuration was removed or blanked: the entity is intentionally dropped
+        updated.remove(mapKey);
+        continue;
+      }
+
+      T entityItem = parseEntityItem(mapKey, value);
+      if (entityItem != null) {
+        assignVersion(entityItem);
+        updated.put(mapKey, entityItem);
+      } else if (Boolean.TRUE.equals(parseFailed.get()) && updated.containsKey(mapKey)) {
+        // The yaml could not be parsed at all. Keep the last valid version instead of letting a typo
+        // remove a working policy, so the handler keeps running with the previous parameters. The
+        // key has already been reported by parseEntityItem.
+        LOGGER.warn("Governance configuration [{}] was not applied, the previous value is kept.", key);
+      } else {
+        // removed, blanked, invalid or bound to another service: the entity is dropped. This is the
+        // existing behavior, intentionally different from a parse failure.
+        updated.remove(mapKey);
       }
     }
+
+    parsedEntity = updated;
+  }
+
+  private void assignVersion(T entity) {
+    entity.setVersion(versionSequence.incrementAndGet());
   }
 
   private Map<String, String> readPropertiesFromPrefix() {
@@ -160,6 +205,7 @@ public abstract class GovernanceProperties<T extends Configurable> implements In
     for (Entry<String, String> entry : yamlEntity.entrySet()) {
       T marker = parseEntityItem(entry.getKey(), entry.getValue());
       if (marker != null) {
+        assignVersion(marker);
         resultMap.put(entry.getKey(), marker);
       }
     }
@@ -169,6 +215,7 @@ public abstract class GovernanceProperties<T extends Configurable> implements In
   protected abstract Class<T> getEntityClass();
 
   protected T parseEntityItem(String key, String value) {
+    parseFailed.set(Boolean.FALSE);
     if (StringUtils.isEmpty(value)) {
       return null;
     }
@@ -189,7 +236,8 @@ public abstract class GovernanceProperties<T extends Configurable> implements In
       }
       return result;
     } catch (RuntimeException e) {
-      LOGGER.error("governance config yaml is illegal : {}", e.getMessage());
+      parseFailed.set(Boolean.TRUE);
+      LOGGER.error("governance config yaml is illegal, configuration key [{}] : {}", key, e.getMessage());
     }
     return null;
   }

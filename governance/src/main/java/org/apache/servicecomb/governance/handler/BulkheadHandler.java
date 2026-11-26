@@ -56,7 +56,8 @@ public class BulkheadHandler extends AbstractGovernanceHandler<Bulkhead, Bulkhea
   }
 
   private Disposable<Bulkhead> getBulkhead(String key, BulkheadPolicy policy) {
-    LOGGER.info("applying new policy {} for {}", key, policy.toString());
+    LOGGER.info("applying new policy {} for {} (policy version {})", key, policy,
+        policy.getVersion());
 
     BulkheadConfig config = BulkheadConfig.custom()
         .maxConcurrentCalls(policy.getMaxConcurrentCalls())

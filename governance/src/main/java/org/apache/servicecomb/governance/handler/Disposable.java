@@ -18,7 +18,13 @@
 package org.apache.servicecomb.governance.handler;
 
 public abstract class Disposable<V> {
-  private long lastAccessed;
+  private volatile long lastAccessed;
+
+  /**
+   * Version of the policy this disposable was created from. 0 means that no version was assigned,
+   * which happens for disposables not built by a governance handler.
+   */
+  private volatile long policyVersion;
 
   protected Disposable() {
     lastAccessed = System.currentTimeMillis();
@@ -37,5 +43,13 @@ public abstract class Disposable<V> {
 
   public long lastAccessed() {
     return lastAccessed;
+  }
+
+  public long getPolicyVersion() {
+    return policyVersion;
+  }
+
+  public void setPolicyVersion(long policyVersion) {
+    this.policyVersion = policyVersion;
   }
 }

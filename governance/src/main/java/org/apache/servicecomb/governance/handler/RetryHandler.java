@@ -63,7 +63,8 @@ public class RetryHandler extends AbstractGovernanceHandler<Retry, RetryPolicy> 
   }
 
   private Disposable<Retry> getRetry(String key, RetryPolicy retryPolicy) {
-    LOGGER.info("applying new policy {} for {}", key, retryPolicy.toString());
+    LOGGER.info("applying new policy {} for {} (policy version {})", key, retryPolicy,
+        retryPolicy.getVersion());
 
     RetryConfig config = RetryConfig.custom()
         .maxAttempts(retryPolicy.getMaxAttempts() + 1)
